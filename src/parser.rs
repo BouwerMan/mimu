@@ -1,7 +1,7 @@
 use crate::instruction::Instruction;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum ParseError {
 	#[error("Invalid instruction format")]
 	InvalidFormat,
@@ -95,5 +95,30 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			Ok(Instruction::Add { rd, rs, rt })
 		}
 		_ => Err(ParseError::UnknownInstruction),
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn parses_load_immediate() {
+		assert_eq!(
+			parse_line("li $t0, 42"),
+			Ok(Instruction::LoadImmediate { rd: 8, imm: 42 }),
+		);
+	}
+
+	#[test]
+	fn parses_add() {
+		assert_eq!(
+			parse_line("add $t0, $t1, $t2"),
+			Ok(Instruction::Add {
+				rd: 8,
+				rs: 9,
+				rt: 10
+			}),
+		);
 	}
 }

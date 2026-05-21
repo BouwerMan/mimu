@@ -1,7 +1,7 @@
 use crate::instruction::Instruction;
 use std::fmt;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Cpu {
 	registers: [i32; 32],
 }
@@ -51,5 +51,30 @@ impl Cpu {
 			}
 			_ => unimplemented!("Instruction not implemented yet"),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+
+	#[test]
+	fn test_load_immediate() {
+		let mut cpu = Cpu::new();
+		cpu.execute(Instruction::LoadImmediate { rd: 8, imm: 42 }); // li $t0, 42
+		assert_eq!(cpu.read_register(8), 42);
+	}
+
+	#[test]
+	fn test_add() {
+		let mut cpu = Cpu::new();
+		cpu.execute(Instruction::LoadImmediate { rd: 8, imm: 10 }); // li $t0, 10
+		cpu.execute(Instruction::LoadImmediate { rd: 9, imm: 20 }); // li $t1, 20
+		cpu.execute(Instruction::Add {
+			rd: 10,
+			rs: 8,
+			rt: 9,
+		}); // add $t2, $t0, $t1
+		assert_eq!(cpu.read_register(10), 30);
 	}
 }
