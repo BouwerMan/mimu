@@ -15,5 +15,5 @@ fn main() {
 
 	let inst = parser::parse_line("li $s0, 122").unwrap();
 	cpu.execute(inst);
-	println!("CPU state: {cpu:?}");
+	println!("{cpu:}");
 }

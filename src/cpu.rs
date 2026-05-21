@@ -1,8 +1,30 @@
 use crate::instruction::Instruction;
+use std::fmt;
 
 #[derive(Debug)]
 pub struct Cpu {
 	registers: [i32; 32],
+}
+
+impl fmt::Display for Cpu {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		const REG_NAMES: [&str; 32] = [
+			"zero", "at", "v0", "v1", "a0", "a1", "a2", "a3", "t0", "t1", "t2", "t3", "t4", "t5",
+			"t6", "t7", "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7", "t8", "t9", "k0", "k1",
+			"gp", "sp", "fp", "ra",
+		];
+
+		writeln!(f, "CPU State:")?;
+		for (i, val) in self.registers.iter().enumerate() {
+			write!(f, "${:<4}: {:>11}", REG_NAMES[i], val)?;
+			if i % 4 == 3 {
+				writeln!(f)?; // end the row
+			} else {
+				write!(f, "    ")?; // gap to the next column
+			}
+		}
+		Ok(())
+	}
 }
 
 impl Cpu {
