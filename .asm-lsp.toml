@@ -1,0 +1,7 @@
+[default_config]
+assembler = "mars"
+instruction_set = "mips"
+
+[opts]
+diagnostics = false
+default_diagnostics = false

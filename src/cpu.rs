@@ -43,6 +43,13 @@ impl Cpu {
 	pub fn execute(&mut self, inst: Instruction) {
 		match inst {
 			Instruction::LoadImmediate { rd, imm } => self.write_register(rd, imm),
+			Instruction::Add { rd, rs, rt } => {
+				let rs_val = self.read_register(rs);
+				let rt_val = self.read_register(rt);
+				let result = rs_val.wrapping_add(rt_val); // Use wrapping_add to handle overflow
+				self.write_register(rd, result);
+			}
+			_ => unimplemented!("Instruction not implemented yet"),
 		}
 	}
 }

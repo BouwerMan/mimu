@@ -74,9 +74,6 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 
 	let mut args = rest.split(',').map(str::trim);
 
-	println!("Mnemonic: {mnemonic}");
-	println!("Rest: {rest}");
-
 	match mnemonic {
 		"li" => {
 			let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
@@ -85,6 +82,17 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			let rd = parse_register(rd)?;
 			let imm = parse_immediate(imm)?;
 			Ok(Instruction::LoadImmediate { rd, imm })
+		}
+		"add" => {
+			let (Some(rd), Some(rs), Some(rt), None) =
+				(args.next(), args.next(), args.next(), args.next())
+			else {
+				return Err(ParseError::InvalidArgument);
+			};
+			let rd = parse_register(rd)?;
+			let rs = parse_register(rs)?;
+			let rt = parse_register(rt)?;
+			Ok(Instruction::Add { rd, rs, rt })
 		}
 		_ => Err(ParseError::UnknownInstruction),
 	}
