@@ -1,5 +1,5 @@
+mod parser;
 use crate::instruction;
-use crate::parser;
 
 pub struct Image {
 	pub text: Vec<u32>,

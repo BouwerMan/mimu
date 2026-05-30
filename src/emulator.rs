@@ -1,28 +1,13 @@
-use crate::assembler::Image;
+mod cpu;
+mod memory;
+
+use crate::asm::Image;
 use crate::instruction::Instruction;
 use crate::instruction::decode;
 use crate::register;
-use crate::register::*;
-use std::collections::HashMap;
-use std::fmt;
+use cpu::Cpu;
+use memory::Memory;
 use thiserror::Error;
-
-#[derive(Debug, PartialEq)]
-pub struct Cpu {
-	registers: [u32; 32],
-	pub pc: u32,
-}
-
-#[derive(Debug)]
-pub struct Memory {
-	data: HashMap<u32, u8>,
-}
-
-#[derive(Debug)]
-pub struct Emulator {
-	cpu: Cpu,
-	memory: Memory,
-}
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ExecError {
@@ -34,6 +19,18 @@ pub enum ExecError {
 pub enum RunState {
 	Running,
 	Halted, // hit an exit syscall
+}
+
+#[derive(Debug)]
+pub struct Emulator {
+	cpu: Cpu,
+	memory: Memory,
+}
+
+impl Default for Emulator {
+	fn default() -> Self {
+		Self::new()
+	}
 }
 
 impl Emulator {
@@ -83,7 +80,7 @@ impl Emulator {
 				self.cpu.write_register(rt, result);
 			}
 			Instruction::Syscall => {
-				let v0 = self.cpu.read_register(V0);
+				let v0 = self.cpu.read_register(register::V0);
 				match v0 {
 					10 => {
 						// exit syscall
@@ -96,70 +93,6 @@ impl Emulator {
 			_ => unimplemented!("Instruction not implemented yet"),
 		}
 		Ok(next_state)
-	}
-}
-
-impl Memory {
-	fn new() -> Self {
-		Memory {
-			data: HashMap::new(),
-		}
-	}
-
-	fn read_byte(&self, addr: u32) -> u8 {
-		self.data.get(&addr).copied().unwrap_or(0)
-	}
-
-	pub fn read_word(&self, addr: u32) -> u32 {
-		let mut word: u32 = 0;
-		for byte in 0..4 {
-			word |= (self.read_byte(addr + byte) as u32) << (byte * 8);
-		}
-		word
-	}
-
-	fn write_byte(&mut self, addr: u32, data: u8) {
-		self.data.insert(addr, data);
-	}
-
-	pub fn write_word(&mut self, addr: u32, word: u32) {
-		for byte in 0..4 {
-			self.write_byte(addr + byte, (word >> (byte * 8)) as u8);
-		}
-	}
-}
-
-impl fmt::Display for Cpu {
-	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-		writeln!(f, "CPU State:")?;
-		for (i, val) in self.registers.iter().enumerate() {
-			write!(f, "${:<4}: {:>11}", register::NAMES[i], val)?;
-			if i % 4 == 3 {
-				writeln!(f)?; // end the row
-			} else {
-				write!(f, "    ")?; // gap to the next column
-			}
-		}
-		Ok(())
-	}
-}
-
-impl Cpu {
-	pub fn new() -> Self {
-		Cpu {
-			registers: [0; 32],
-			pc: 0,
-		}
-	}
-
-	fn read_register(&self, reg: usize) -> u32 {
-		self.registers[reg]
-	}
-
-	fn write_register(&mut self, reg: usize, value: u32) {
-		if reg != 0 {
-			self.registers[reg] = value;
-		}
 	}
 }
 

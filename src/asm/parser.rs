@@ -94,14 +94,6 @@ mod tests {
 	use crate::register::{T0, T1, T2};
 
 	#[test]
-	fn parses_load_immediate() {
-		assert_eq!(
-			parse_line("li $t0, 42"),
-			Ok(Instruction::LoadImmediate { rd: T0, imm: 42 }),
-		);
-	}
-
-	#[test]
 	fn parses_add() {
 		assert_eq!(
 			parse_line("add $t0, $t1, $t2"),
@@ -111,5 +103,22 @@ mod tests {
 				rt: T2
 			}),
 		);
+	}
+
+	#[test]
+	fn parses_addi() {
+		assert_eq!(
+			parse_line("addi $t0, $t1, 42"),
+			Ok(Instruction::Addi {
+				rs: T1,
+				rt: T0,
+				imm: 42
+			}),
+		);
+	}
+
+	#[test]
+	fn parses_syscall() {
+		assert_eq!(parse_line("syscall"), Ok(Instruction::Syscall),);
 	}
 }
