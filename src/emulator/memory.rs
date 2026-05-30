@@ -12,7 +12,7 @@ impl Memory {
 		}
 	}
 
-	fn read_byte(&self, addr: u32) -> u8 {
+	pub fn read_byte(&self, addr: u32) -> u8 {
 		self.data.get(&addr).copied().unwrap_or(0)
 	}
 
@@ -24,7 +24,7 @@ impl Memory {
 		word
 	}
 
-	fn write_byte(&mut self, addr: u32, data: u8) {
+	pub fn write_byte(&mut self, addr: u32, data: u8) {
 		self.data.insert(addr, data);
 	}
 

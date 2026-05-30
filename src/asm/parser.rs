@@ -44,14 +44,18 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 	let mut args = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
 
 	match mnemonic {
-		// "li" => {
-		// 	let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
-		// 		return Err(ParseError::InvalidArgument);
-		// 	};
-		// 	let rd = parse_register(rd)?;
-		// 	let imm = parse_immediate(imm)?;
-		// 	Ok(Instruction::LoadImmediate { rd, imm })
-		// }
+		"li" => {
+			let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
+				return Err(ParseError::InvalidArgument);
+			};
+			let rd = parse_register(rd)?;
+			let imm = parse_immediate(imm)?;
+			Ok(Instruction::AddImmediate {
+				rt: rd,
+				rs: register::ZERO,
+				imm: imm as i16,
+			})
+		}
 		"add" => {
 			let (Some(rd), Some(rs), Some(rt), None) =
 				(args.next(), args.next(), args.next(), args.next())
@@ -72,7 +76,7 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			let rt = parse_register(rt)?;
 			let rs = parse_register(rs)?;
 			let imm = parse_immediate(imm)?;
-			Ok(Instruction::Addi {
+			Ok(Instruction::AddImmediate {
 				rs,
 				rt,
 				imm: imm as i16,
@@ -109,7 +113,7 @@ mod tests {
 	fn parses_addi() {
 		assert_eq!(
 			parse_line("addi $t0, $t1, 42"),
-			Ok(Instruction::Addi {
+			Ok(Instruction::AddImmediate {
 				rs: T1,
 				rt: T0,
 				imm: 42

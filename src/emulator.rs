@@ -9,6 +9,9 @@ use cpu::Cpu;
 use memory::Memory;
 use thiserror::Error;
 
+const TEXT_START: u32 = 0x0040_0000;
+const DATA_START: u32 = 0x1000_0000;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum ExecError {
 	#[error("Unknown instruction")]
@@ -43,13 +46,23 @@ impl Emulator {
 
 	pub fn load(&mut self, img: &Image) {
 		for (i, word) in img.text.iter().enumerate() {
-			self.memory.write_word(i as u32 * 4, *word);
+			self.memory.write_word((i as u32 * 4) + TEXT_START, *word);
 		}
+
+		for (i, word) in img.data.iter().enumerate() {
+			self.memory.write_byte((i as u32 * 4) + DATA_START, *word);
+		}
+
+		self.cpu.pc = TEXT_START + img.entry;
 	}
 
 	pub fn step(&mut self) -> Result<RunState, ExecError> {
 		let inst_raw = self.memory.read_word(self.cpu.pc); // Fetch instruction at current PC
 		let inst = decode(inst_raw);
+		println!(
+			"Executing instruction at PC={:#010x}: {:#010x} -> {:?}",
+			self.cpu.pc, inst_raw, inst
+		); // Debug print
 		self.cpu.pc = self.cpu.pc.wrapping_add(4);
 		self.execute(inst)
 	}
@@ -67,14 +80,13 @@ impl Emulator {
 	fn execute(&mut self, inst: Instruction) -> Result<RunState, ExecError> {
 		let mut next_state = RunState::Running;
 		match inst {
-			Instruction::LoadImmediate { rd, imm } => self.cpu.write_register(rd, imm as u32),
 			Instruction::Add { rd, rs, rt } => {
 				let rs_val = self.cpu.read_register(rs);
 				let rt_val = self.cpu.read_register(rt);
 				let result = rs_val.wrapping_add(rt_val); // Use wrapping_add to handle overflow
 				self.cpu.write_register(rd, result);
 			}
-			Instruction::Addi { rt, rs, imm } => {
+			Instruction::AddImmediate { rt, rs, imm } => {
 				let rs_val = self.cpu.read_register(rs);
 				let result = rs_val.wrapping_add(imm as u32); // Use wrapping_add to handle overflow
 				self.cpu.write_register(rt, result);
@@ -102,17 +114,18 @@ mod tests {
 	use crate::register::{T0, T1, T2};
 
 	#[test]
-	fn test_load_immediate() {
-		let mut emu = Emulator::new();
-		emu.execute(Instruction::LoadImmediate { rd: T0, imm: 42 }); // li $t0, 42
-		assert_eq!(emu.register(T0), 42);
-	}
-
-	#[test]
 	fn test_add() {
 		let mut emu = Emulator::new();
-		emu.execute(Instruction::LoadImmediate { rd: T0, imm: 10 }); // li $t0, 10
-		emu.execute(Instruction::LoadImmediate { rd: T1, imm: 20 }); // li $t1, 20
+		emu.execute(Instruction::AddImmediate {
+			rt: T0,
+			rs: register::ZERO,
+			imm: 10,
+		});
+		emu.execute(Instruction::AddImmediate {
+			rt: T1,
+			rs: register::ZERO,
+			imm: 20,
+		});
 		emu.execute(Instruction::Add {
 			rd: T2,
 			rs: T0,
