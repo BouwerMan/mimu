@@ -1,6 +1,28 @@
+use std::collections::HashMap;
+
 use crate::instruction::Instruction;
 use crate::register;
 use thiserror::Error;
+
+#[derive(Debug, PartialEq)]
+pub enum Parsed {
+	Ready(Instruction), // add, addi, li, syscall…
+	Branch {
+		kind: Cond,
+		rs: usize,
+		rt: usize,
+		label: String,
+	},
+	Jump {
+		label: String,
+	},
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum Cond {
+	Eq,
+	Ne,
+}
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ParseError {
@@ -8,6 +30,12 @@ pub enum ParseError {
 	UnknownInstruction,
 	#[error("Invalid argument")]
 	InvalidArgument,
+	#[error("Undefined label: {label:?}")]
+	UndefinedLabel { label: String },
+	#[error(
+		"Branch out of range (Here: {here:#04x}, Target: {target:#04x}, delta >> 2: {delta:#04x})"
+	)]
+	BranchOutOfRange { here: u32, target: u32, delta: i64 },
 }
 
 fn parse_register(reg: &str) -> Result<usize, ParseError> {
@@ -36,7 +64,7 @@ fn parse_immediate(imm: &str) -> Result<i32, ParseError> {
 }
 
 // Ex: li $t0, 12
-pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
+pub fn parse_line(input: &str) -> Result<Parsed, ParseError> {
 	let input = input.trim();
 	let (mnemonic, rest) = input.split_once(char::is_whitespace).unwrap_or((input, ""));
 	let mut args = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
@@ -48,11 +76,11 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			};
 			let rd = parse_register(rd)?;
 			let imm = parse_immediate(imm)?;
-			Ok(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::AddImmediate {
 				rt: rd,
 				rs: register::ZERO,
 				imm: imm as i16,
-			})
+			}))
 		}
 		"add" => {
 			let (Some(rd), Some(rs), Some(rt), None) =
@@ -63,7 +91,7 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			let rd = parse_register(rd)?;
 			let rs = parse_register(rs)?;
 			let rt = parse_register(rt)?;
-			Ok(Instruction::Add { rd, rs, rt })
+			Ok(Parsed::Ready(Instruction::Add { rd, rs, rt }))
 		}
 		"addi" => {
 			let (Some(rt), Some(rs), Some(imm), None) =
@@ -74,19 +102,90 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			let rt = parse_register(rt)?;
 			let rs = parse_register(rs)?;
 			let imm = parse_immediate(imm)?;
-			Ok(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::AddImmediate {
 				rs,
 				rt,
 				imm: imm as i16,
-			})
+			}))
 		}
 		"syscall" => {
 			if args.next().is_some() {
 				return Err(ParseError::InvalidArgument);
 			}
-			Ok(Instruction::Syscall)
+			Ok(Parsed::Ready(Instruction::Syscall))
 		}
+
+		"beq" | "bne" => {
+			let (Some(rs), Some(rt), Some(label), None) =
+				(args.next(), args.next(), args.next(), args.next())
+			else {
+				return Err(ParseError::InvalidArgument);
+			};
+
+			let kind = if mnemonic == "beq" {
+				Cond::Eq
+			} else {
+				Cond::Ne
+			};
+
+			Ok(Parsed::Branch {
+				kind,
+				rs: parse_register(rs)?,
+				rt: parse_register(rt)?,
+				label: label.to_string(),
+			})
+		}
+
+		"j" => {
+			let (Some(label), None) = (args.next(), args.next()) else {
+				return Err(ParseError::InvalidArgument);
+			};
+			Ok(Parsed::Jump {
+				label: label.to_string(),
+			})
+		}
+
 		_ => Err(ParseError::UnknownInstruction),
+	}
+}
+
+fn branch_offset(here: u32, target: u32) -> Result<i16, ParseError> {
+	let delta = target as i64 - (here as i64 + 4);
+	i16::try_from(delta >> 2).map_err(|_| ParseError::BranchOutOfRange {
+		here,
+		target,
+		delta: delta >> 2,
+	})
+}
+
+pub fn resolve(
+	parsed: Parsed,
+	here: u32,
+	labels: &HashMap<String, u32>,
+) -> Result<Instruction, ParseError> {
+	match parsed {
+		Parsed::Ready(inst) => Ok(inst),
+		Parsed::Branch {
+			kind,
+			rs,
+			rt,
+			label,
+		} => {
+			let target = *labels
+				.get(&label)
+				.ok_or(ParseError::UndefinedLabel { label })?;
+			let offset = branch_offset(here, target)?;
+			Ok(match kind {
+				Cond::Eq => Instruction::Beq { rs, rt, offset },
+				Cond::Ne => Instruction::Bne { rs, rt, offset },
+			})
+		}
+		Parsed::Jump { label } => {
+			let target = *labels
+				.get(&label)
+				.ok_or(ParseError::UndefinedLabel { label })?;
+			Ok(Instruction::Jump { target })
+		}
 	}
 }
 
@@ -116,11 +215,11 @@ mod tests {
 	fn parses_add() {
 		assert_eq!(
 			parse_line("add $t0, $t1, $t2"),
-			Ok(Instruction::Add {
+			Ok(Parsed::Ready(Instruction::Add {
 				rd: T0,
 				rs: T1,
 				rt: T2
-			}),
+			})),
 		);
 	}
 
@@ -128,16 +227,19 @@ mod tests {
 	fn parses_addi() {
 		assert_eq!(
 			parse_line("addi $t0, $t1, 42"),
-			Ok(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::AddImmediate {
 				rs: T1,
 				rt: T0,
 				imm: 42
-			}),
+			})),
 		);
 	}
 
 	#[test]
 	fn parses_syscall() {
-		assert_eq!(parse_line("syscall"), Ok(Instruction::Syscall),);
+		assert_eq!(
+			parse_line("syscall"),
+			Ok(Parsed::Ready(Instruction::Syscall)),
+		);
 	}
 }

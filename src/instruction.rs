@@ -2,8 +2,14 @@
 pub enum Instruction {
 	Add { rd: usize, rs: usize, rt: usize },
 	AddImmediate { rt: usize, rs: usize, imm: i16 },
+
+	Beq { rs: usize, rt: usize, offset: i16 },
+	Bne { rs: usize, rt: usize, offset: i16 },
+	Jump { target: u32 }, // absolute byte address
+
 	Syscall,
 }
+
 pub fn decode(word: u32) -> Instruction {
 	use Instruction::*;
 	match opcode(word) {
@@ -26,6 +32,9 @@ pub fn decode(word: u32) -> Instruction {
 		// 	f => unimplemented!("SPECIAL2 funct {f:#04x}"),
 		// },
 		// J-type: opcode alone
+		0x02 => Jump {
+			target: target(word) << 2,
+		}, // top 4 bits unrecoverable w/o PC; fine in one region
 
 		// I-type: opcode alone
 		0x08 => AddImmediate {
@@ -33,6 +42,17 @@ pub fn decode(word: u32) -> Instruction {
 			rs: rs(word),
 			imm: imm(word),
 		},
+		0x04 => Beq {
+			rs: rs(word),
+			rt: rt(word),
+			offset: imm(word),
+		},
+		0x05 => Bne {
+			rs: rs(word),
+			rt: rt(word),
+			offset: imm(word),
+		},
+
 		o => unimplemented!("opcode {o:#04x}"),
 	}
 }
@@ -41,6 +61,11 @@ pub fn encode(inst: &Instruction) -> u32 {
 	match inst {
 		Instruction::Add { rd, rs, rt } => r_type(0x20, *rs, *rt, *rd, 0),
 		Instruction::AddImmediate { rt, rs, imm } => i_type(0x08, *rs, *rt, *imm),
+
+		Instruction::Beq { rs, rt, offset } => i_type(0x04, *rs, *rt, *offset),
+		Instruction::Bne { rs, rt, offset } => i_type(0x05, *rs, *rt, *offset),
+		Instruction::Jump { target } => j_type(0x02, target >> 2),
+
 		Instruction::Syscall => r_type(0x0c, 0, 0, 0, 0),
 		i => unimplemented!("No encoding implemented for instruction {i:?}"),
 	}
