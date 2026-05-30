@@ -9,9 +9,6 @@ use cpu::Cpu;
 use memory::Memory;
 use thiserror::Error;
 
-const TEXT_START: u32 = 0x0040_0000;
-const DATA_START: u32 = 0x1000_0000;
-
 #[derive(Error, Debug, PartialEq)]
 pub enum ExecError {
 	#[error("Unknown instruction")]
@@ -46,14 +43,16 @@ impl Emulator {
 
 	pub fn load(&mut self, img: &Image) {
 		for (i, word) in img.text.iter().enumerate() {
-			self.memory.write_word((i as u32 * 4) + TEXT_START, *word);
+			self.memory
+				.write_word((i as u32 * 4) + img.text_start, *word);
 		}
 
 		for (i, word) in img.data.iter().enumerate() {
-			self.memory.write_byte((i as u32 * 4) + DATA_START, *word);
+			self.memory
+				.write_byte((i as u32 * 4) + img.data_start, *word);
 		}
 
-		self.cpu.pc = TEXT_START + img.entry;
+		self.cpu.pc = img.entry;
 	}
 
 	pub fn step(&mut self) -> Result<RunState, ExecError> {

@@ -4,8 +4,6 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum ParseError {
-	#[error("Invalid instruction format")]
-	InvalidFormat,
 	#[error("Unknown instruction")]
 	UnknownInstruction,
 	#[error("Invalid argument")]
@@ -96,6 +94,23 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 mod tests {
 	use super::*;
 	use crate::register::{T0, T1, T2};
+
+	#[test]
+	fn malformed_lines_are_rejected() {
+		let cases = [
+			("foo $t0, $t1, $t2", ParseError::UnknownInstruction),
+			("add t0, $t1, $t2", ParseError::InvalidArgument), // missing $
+			("add $t0, $t1", ParseError::InvalidArgument),     // too few args
+			("add $t0, $t1, $t2, $t3", ParseError::InvalidArgument), // too many
+			("addi $t0, $40, 1", ParseError::InvalidArgument), // reg out of range
+			("li $nope, 1", ParseError::InvalidArgument),      // bad reg name
+			("li $t0, banana", ParseError::InvalidArgument),   // non-numeric imm
+			("syscall $t0", ParseError::InvalidArgument),      // args on syscall
+		];
+		for (src, expected) in cases {
+			assert_eq!(parse_line(src), Err(expected), "input: {src:?}");
+		}
+	}
 
 	#[test]
 	fn parses_add() {
