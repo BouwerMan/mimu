@@ -1,4 +1,5 @@
 use crate::instruction::Instruction;
+use crate::register;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -17,47 +18,17 @@ fn parse_register(reg: &str) -> Result<usize, ParseError> {
 		.strip_prefix('$')
 		.ok_or(ParseError::InvalidArgument)?;
 
-	match reg.parse::<usize>() {
-		Ok(n) if n < 32 => return Ok(n),
-		Ok(_) => return Err(ParseError::InvalidArgument), // EX: $40
-		Err(_) => {}                                      // not numeric
+	// Numeric form, e.g. `$8`.
+	if let Ok(n) = reg.parse::<usize>() {
+		return if n < 32 {
+			Ok(n)
+		} else {
+			Err(ParseError::InvalidArgument) // EX: $40
+		};
 	}
 
-	match reg {
-		"zero" => Ok(0),
-		"at" => Ok(1),
-		"v0" => Ok(2),
-		"v1" => Ok(3),
-		"a0" => Ok(4),
-		"a1" => Ok(5),
-		"a2" => Ok(6),
-		"a3" => Ok(7),
-		"t0" => Ok(8),
-		"t1" => Ok(9),
-		"t2" => Ok(10),
-		"t3" => Ok(11),
-		"t4" => Ok(12),
-		"t5" => Ok(13),
-		"t6" => Ok(14),
-		"t7" => Ok(15),
-		"s0" => Ok(16),
-		"s1" => Ok(17),
-		"s2" => Ok(18),
-		"s3" => Ok(19),
-		"s4" => Ok(20),
-		"s5" => Ok(21),
-		"s6" => Ok(22),
-		"s7" => Ok(23),
-		"t8" => Ok(24),
-		"t9" => Ok(25),
-		"k0" => Ok(26),
-		"k1" => Ok(27),
-		"gp" => Ok(28),
-		"sp" => Ok(29),
-		"fp" | "s8" => Ok(30),
-		"ra" => Ok(31),
-		_ => Err(ParseError::InvalidArgument),
-	}
+	// Named form, e.g. `$t0` (or the `s8` alias for `$fp`).
+	register::name_to_index(reg).ok_or(ParseError::InvalidArgument)
 }
 
 fn parse_immediate(imm: &str) -> Result<i32, ParseError> {
@@ -68,11 +39,9 @@ fn parse_immediate(imm: &str) -> Result<i32, ParseError> {
 
 // Ex: li $t0, 12
 pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
-	let Some((mnemonic, rest)) = input.split_once(char::is_whitespace) else {
-		return Err(ParseError::InvalidFormat);
-	};
-
-	let mut args = rest.split(',').map(str::trim);
+	let input = input.trim();
+	let (mnemonic, rest) = input.split_once(char::is_whitespace).unwrap_or((input, ""));
+	let mut args = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
 
 	match mnemonic {
 		"li" => {
@@ -94,6 +63,27 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			let rt = parse_register(rt)?;
 			Ok(Instruction::Add { rd, rs, rt })
 		}
+		"addi" => {
+			let (Some(rs), Some(rt), Some(imm), None) =
+				(args.next(), args.next(), args.next(), args.next())
+			else {
+				return Err(ParseError::InvalidArgument);
+			};
+			let rs = parse_register(rs)?;
+			let rt = parse_register(rt)?;
+			let imm = parse_immediate(imm)?;
+			Ok(Instruction::Addi {
+				rs,
+				rt,
+				imm: imm as i16,
+			})
+		}
+		"syscall" => {
+			if args.next().is_some() {
+				return Err(ParseError::InvalidArgument);
+			}
+			Ok(Instruction::Syscall)
+		}
 		_ => Err(ParseError::UnknownInstruction),
 	}
 }
@@ -101,12 +91,13 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 #[cfg(test)]
 mod tests {
 	use super::*;
+	use crate::register::{T0, T1, T2};
 
 	#[test]
 	fn parses_load_immediate() {
 		assert_eq!(
 			parse_line("li $t0, 42"),
-			Ok(Instruction::LoadImmediate { rd: 8, imm: 42 }),
+			Ok(Instruction::LoadImmediate { rd: T0, imm: 42 }),
 		);
 	}
 
@@ -115,9 +106,9 @@ mod tests {
 		assert_eq!(
 			parse_line("add $t0, $t1, $t2"),
 			Ok(Instruction::Add {
-				rd: 8,
-				rs: 9,
-				rt: 10
+				rd: T0,
+				rs: T1,
+				rt: T2
 			}),
 		);
 	}
