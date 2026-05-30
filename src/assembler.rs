@@ -23,9 +23,9 @@ pub fn assemble(path: &str) -> Result<Image, Box<dyn std::error::Error>> {
 	let mut img = Image::new();
 
 	for line in src.lines() {
-		let first_char: Vec<char> = line.chars().take(1).collect();
-		if first_char.is_empty() || first_char[0].is_whitespace() || first_char[0] == '#' {
-			continue; // skip blank lines and comments
+		let line = line.trim();
+		if line.is_empty() || line.starts_with('#') {
+			continue;
 		}
 		let inst =
 			parser::parse_line(line).map_err(|e| format!("Error parsing line '{line}': {e}"))?;

@@ -2,7 +2,7 @@
 pub enum Instruction {
 	LoadImmediate { rd: usize, imm: i32 },
 	Add { rd: usize, rs: usize, rt: usize },
-	Addi { rs: usize, rt: usize, imm: i16 },
+	Addi { rt: usize, rs: usize, imm: i16 },
 	Syscall,
 }
 
@@ -39,7 +39,7 @@ pub fn encode(inst: &Instruction) -> u32 {
 			word |= (rt & 0x1f) << 16;
 			word as u32
 		}
-		Instruction::Addi { rs, rt, imm } => {
+		Instruction::Addi { rt, rs, imm } => {
 			let opcode = 0x08 << 26;
 			let mut word = opcode;
 			word |= (rt & 0x1f) << 16;

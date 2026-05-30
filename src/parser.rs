@@ -44,14 +44,14 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 	let mut args = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
 
 	match mnemonic {
-		"li" => {
-			let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
-				return Err(ParseError::InvalidArgument);
-			};
-			let rd = parse_register(rd)?;
-			let imm = parse_immediate(imm)?;
-			Ok(Instruction::LoadImmediate { rd, imm })
-		}
+		// "li" => {
+		// 	let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
+		// 		return Err(ParseError::InvalidArgument);
+		// 	};
+		// 	let rd = parse_register(rd)?;
+		// 	let imm = parse_immediate(imm)?;
+		// 	Ok(Instruction::LoadImmediate { rd, imm })
+		// }
 		"add" => {
 			let (Some(rd), Some(rs), Some(rt), None) =
 				(args.next(), args.next(), args.next(), args.next())
@@ -64,13 +64,13 @@ pub fn parse_line(input: &str) -> Result<Instruction, ParseError> {
 			Ok(Instruction::Add { rd, rs, rt })
 		}
 		"addi" => {
-			let (Some(rs), Some(rt), Some(imm), None) =
+			let (Some(rt), Some(rs), Some(imm), None) =
 				(args.next(), args.next(), args.next(), args.next())
 			else {
 				return Err(ParseError::InvalidArgument);
 			};
-			let rs = parse_register(rs)?;
 			let rt = parse_register(rt)?;
+			let rs = parse_register(rs)?;
 			let imm = parse_immediate(imm)?;
 			Ok(Instruction::Addi {
 				rs,

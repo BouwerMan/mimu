@@ -38,14 +38,10 @@ pub enum RunState {
 
 impl Emulator {
 	pub fn new() -> Self {
-		let mut cpu = Cpu::new();
-		let memory = Memory::new();
-
-		cpu.write_register(8, 0);
-		cpu.write_register(T0, 12);
-		cpu.write_register(T1, 34);
-
-		Emulator { cpu, memory }
+		Emulator {
+			cpu: Cpu::new(),
+			memory: Memory::new(),
+		}
 	}
 
 	pub fn load(&mut self, img: &Image) {
@@ -81,7 +77,7 @@ impl Emulator {
 				let result = rs_val.wrapping_add(rt_val); // Use wrapping_add to handle overflow
 				self.cpu.write_register(rd, result);
 			}
-			Instruction::Addi { rs, rt, imm } => {
+			Instruction::Addi { rt, rs, imm } => {
 				let rs_val = self.cpu.read_register(rs);
 				let result = rs_val.wrapping_add(imm as u32); // Use wrapping_add to handle overflow
 				self.cpu.write_register(rt, result);
