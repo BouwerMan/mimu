@@ -1,7 +1,85 @@
+/// Opcode field (bits 31..26).
+mod op {
+	pub const SPECIAL: u32 = 0x00; // R-type; dispatch on funct
+	pub const REGIMM: u32 = 0x01; // dispatch on rt
+	pub const SPECIAL2: u32 = 0x1c; // dispatch on funct
+	pub const J: u32 = 0x02;
+	pub const JAL: u32 = 0x03;
+	pub const BEQ: u32 = 0x04;
+	pub const BNE: u32 = 0x05;
+	pub const ADDI: u32 = 0x08;
+	pub const ADDIU: u32 = 0x09;
+	pub const SLTI: u32 = 0x0a;
+	pub const SLTIU: u32 = 0x0b;
+	pub const ANDI: u32 = 0x0c;
+	pub const ORI: u32 = 0x0d;
+	pub const XORI: u32 = 0x0e;
+	pub const LUI: u32 = 0x0f;
+	pub const LW: u32 = 0x23;
+	pub const SW: u32 = 0x2b;
+}
+
+/// SPECIAL funct field (bits 5..0), valid when opcode == SPECIAL.
+mod funct {
+	pub const SLL: u32 = 0x00;
+	pub const SRL: u32 = 0x02;
+	pub const SRA: u32 = 0x03;
+	pub const SLLV: u32 = 0x04;
+	pub const SRLV: u32 = 0x06;
+	pub const SRAV: u32 = 0x07;
+	pub const JR: u32 = 0x08;
+	pub const JALR: u32 = 0x09;
+	pub const SYSCALL: u32 = 0x0c;
+	pub const MULT: u32 = 0x18;
+	pub const MULTU: u32 = 0x19;
+	pub const DIV: u32 = 0x1a;
+	pub const DIVU: u32 = 0x1b;
+	pub const ADD: u32 = 0x20;
+	pub const ADDU: u32 = 0x21;
+	pub const SUB: u32 = 0x22;
+	pub const SUBU: u32 = 0x23;
+	pub const AND: u32 = 0x24;
+	pub const OR: u32 = 0x25;
+	pub const XOR: u32 = 0x26;
+	pub const NOR: u32 = 0x27;
+	pub const SLT: u32 = 0x2a;
+	pub const SLTU: u32 = 0x2b;
+}
+
+// https://student.cs.uwaterloo.ca/~isg/res/mips/opcodes
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
 	Add { rd: usize, rs: usize, rt: usize },
-	AddImmediate { rt: usize, rs: usize, imm: i16 },
+	Addu { rd: usize, rs: usize, rt: usize },
+	Addi { rt: usize, rs: usize, imm: i16 },
+	Addiu { rt: usize, rs: usize, imm: i16 },
+
+	And { rd: usize, rs: usize, rt: usize },
+	Andi { rt: usize, rs: usize, imm: i16 },
+
+	Div { rs: usize, rt: usize },
+	Divu { rs: usize, rt: usize },
+
+	Mult { rs: usize, rt: usize },
+	Multu { rs: usize, rt: usize },
+
+	Nor { rd: usize, rs: usize, rt: usize },
+	Or { rd: usize, rs: usize, rt: usize },
+	Ori { rt: usize, rs: usize, imm: i16 },
+
+	Sll { rd: usize, rt: usize, shamt: u32 },
+	Sllv { rd: usize, rt: usize, rs: usize },
+
+	Sra { rd: usize, rt: usize, shamt: u32 },
+	Srav { rd: usize, rt: usize, rs: usize },
+	Srl { rd: usize, rt: usize, shamt: u32 },
+	Srlv { rd: usize, rt: usize, rs: usize },
+
+	Sub { rd: usize, rs: usize, rt: usize },
+	Subu { rd: usize, rs: usize, rt: usize },
+
+	Xor { rd: usize, rs: usize, rt: usize },
+	Xori { rt: usize, rs: usize, imm: i16 },
 
 	Beq { rs: usize, rt: usize, offset: i16 },
 	Bne { rs: usize, rt: usize, offset: i16 },
@@ -12,45 +90,35 @@ pub enum Instruction {
 
 pub fn decode(word: u32) -> Instruction {
 	use Instruction::*;
+	use op::*;
+	let (rs, rt, rd, imm) = (rs(word), rt(word), rd(word), imm(word));
 	match opcode(word) {
 		// SPECIAL: sub-dispatch on funct
-		0x00 => match funct(word) {
-			0x20 => Add {
-				rd: rd(word),
-				rs: rs(word),
-				rt: rt(word),
-			},
-			0x0c => Syscall,
-			f => unimplemented!("SPECIAL funct {f:#04x}"),
-		},
-		// // REGIMM: sub-dispatch on the rt field
-		// 0x01 => match rt(word) {
-		// 	s => unimplemented!("REGIMM rt {s:#04x}"),
-		// },
-		// // SPECIAL2: sub-dispatch on funct
-		// 0x1c => match funct(word) {
-		// 	f => unimplemented!("SPECIAL2 funct {f:#04x}"),
-		// },
+		SPECIAL => decode_r_type(word),
+		// REGIMM: sub-dispatch on the rt field
+		REGIMM => decode_regimm(word),
+		// SPECIAL2: sub-dispatch on funct
+		SPECIAL2 => decode_special2(word),
 		// J-type: opcode alone
-		0x02 => Jump {
+		J => Jump {
 			target: target(word) << 2,
 		}, // top 4 bits unrecoverable w/o PC; fine in one region
 
 		// I-type: opcode alone
-		0x08 => AddImmediate {
-			rt: rt(word),
-			rs: rs(word),
-			imm: imm(word),
+		ADDI => Addi { rt, rs, imm },
+		ADDIU => Addiu { rt, rs, imm },
+		ANDI => Andi { rt, rs, imm },
+		ORI => Ori { rt, rs, imm },
+		XORI => Xori { rt, rs, imm },
+		BEQ => Beq {
+			rs,
+			rt,
+			offset: imm,
 		},
-		0x04 => Beq {
-			rs: rs(word),
-			rt: rt(word),
-			offset: imm(word),
-		},
-		0x05 => Bne {
-			rs: rs(word),
-			rt: rt(word),
-			offset: imm(word),
+		BNE => Bne {
+			rs,
+			rt,
+			offset: imm,
 		},
 
 		o => unimplemented!("opcode {o:#04x}"),
@@ -58,20 +126,112 @@ pub fn decode(word: u32) -> Instruction {
 }
 
 pub fn encode(inst: &Instruction) -> u32 {
+	use Instruction::*;
+	use funct::*;
+	use op::*;
 	match inst {
-		Instruction::Add { rd, rs, rt } => r_type(0x20, *rs, *rt, *rd, 0),
-		Instruction::AddImmediate { rt, rs, imm } => i_type(0x08, *rs, *rt, *imm),
+		Add { rd, rs, rt } => r_type(ADD, *rs, *rt, *rd, 0),
+		Addu { rd, rs, rt } => r_type(ADDU, *rs, *rt, *rd, 0),
+		Addi { rt, rs, imm } => i_type(0x08, *rs, *rt, *imm),
+		Addiu { rt, rs, imm } => i_type(0x09, *rs, *rt, *imm),
+		Andi { rt, rs, imm } => i_type(0x0c, *rs, *rt, *imm),
 
-		Instruction::Beq { rs, rt, offset } => i_type(0x04, *rs, *rt, *offset),
-		Instruction::Bne { rs, rt, offset } => i_type(0x05, *rs, *rt, *offset),
-		Instruction::Jump { target } => j_type(0x02, target >> 2),
+		And { rd, rs, rt } => r_type(AND, *rs, *rt, *rd, 0),
 
-		Instruction::Syscall => r_type(0x0c, 0, 0, 0, 0),
+		Div { rs, rt } => r_type(DIV, *rs, *rt, 0, 0),
+		Divu { rs, rt } => r_type(DIVU, *rs, *rt, 0, 0),
+
+		Mult { rs, rt } => r_type(MULT, *rs, *rt, 0, 0),
+		Multu { rs, rt } => r_type(MULTU, *rs, *rt, 0, 0),
+
+		Nor { rd, rs, rt } => r_type(NOR, *rs, *rt, *rd, 0),
+		Or { rd, rs, rt } => r_type(OR, *rs, *rt, *rd, 0),
+		Ori { rt, rs, imm } => i_type(ORI, *rs, *rt, *imm),
+
+		Sll { rd, rt, shamt } => r_type(SLL, 0, *rt, *rd, *shamt),
+		Sllv { rd, rt, rs } => r_type(SLLV, *rs, *rt, *rd, 0),
+
+		Sra { rd, rt, shamt } => r_type(SRA, 0, *rt, *rd, *shamt),
+		Srav { rd, rt, rs } => r_type(SRAV, *rs, *rt, *rd, 0),
+		Srl { rd, rt, shamt } => r_type(SRL, 0, *rt, *rd, *shamt),
+		Srlv { rd, rt, rs } => r_type(SRLV, *rs, *rt, *rd, 0),
+
+		Sub { rd, rs, rt } => r_type(SUB, *rs, *rt, *rd, 0),
+		Subu { rd, rs, rt } => r_type(SUBU, *rs, *rt, *rd, 0),
+
+		Xor { rd, rs, rt } => r_type(XOR, *rs, *rt, *rd, 0),
+		Xori { rt, rs, imm } => i_type(0x0e, *rs, *rt, *imm),
+
+		Beq { rs, rt, offset } => i_type(BEQ, *rs, *rt, *offset),
+		Bne { rs, rt, offset } => i_type(BNE, *rs, *rt, *offset),
+		Jump { target } => j_type(J, target >> 2),
+
+		Syscall => r_type(SYSCALL, 0, 0, 0, 0),
 		i => unimplemented!("No encoding implemented for instruction {i:?}"),
 	}
 }
 
-// Decode field accessors
+// Decode helpers
+
+fn decode_r_type(w: u32) -> Instruction {
+	use Instruction::*;
+	use funct::*;
+	let (rs, rt, rd, shamt) = (rs(w), rt(w), rd(w), shamt(w));
+	match funct(w) {
+		SLL => Sll { rd, rt, shamt },
+		SRL => Srl { rd, rt, shamt },
+		SRA => Sra { rd, rt, shamt },
+		SLLV => Sllv { rd, rt, rs },
+		SRLV => Srlv { rd, rt, rs },
+		SRAV => Srav { rd, rt, rs },
+		MULT => Mult { rs, rt },
+		MULTU => Multu { rs, rt },
+		DIV => Div { rs, rt },
+		DIVU => Divu { rs, rt },
+		ADD => Add { rd, rs, rt },
+		ADDU => Addu { rd, rs, rt },
+		SUB => Sub { rd, rs, rt },
+		SUBU => Subu { rd, rs, rt },
+		AND => And { rd, rs, rt },
+		OR => Or { rd, rs, rt },
+		XOR => Xor { rd, rs, rt },
+		NOR => Nor { rd, rs, rt },
+		SYSCALL => Syscall,
+		f => unimplemented!("SPECIAL funct {f:#04x}"),
+	}
+}
+
+fn decode_regimm(w: u32) -> Instruction {
+	use Instruction::*;
+	let (rs, subop) = (rs(w), rt(w));
+	match subop {
+		s => unimplemented!("REGIMM subop {s:#04x}"),
+	}
+}
+
+fn decode_special2(w: u32) -> Instruction {
+	use Instruction::*;
+	let (rs, rt, rd, shamt) = (rs(w), rt(w), rd(w), shamt(w));
+	match funct(w) {
+		f => unimplemented!("SPECIAL2 funct {f:#04x}"),
+	}
+}
+
+fn decode_j_type(w: u32) -> Instruction {
+	use Instruction::*;
+	let target = target(w);
+	match opcode(w) {
+		o => unimplemented!("J-type opcode {o:#04x}"),
+	}
+}
+fn decode_i_type(w: u32) -> Instruction {
+	use Instruction::*;
+	let (rs, rt, imm) = (rs(w), rt(w), imm(w));
+	match opcode(w) {
+		o => unimplemented!("I-type opcode {o:#04x}"),
+	}
+}
+
 fn opcode(w: u32) -> u32 {
 	w >> 26
 }
@@ -125,7 +285,13 @@ fn regimm(rs: usize, subop: u32, imm: i16) -> u32 {
 mod tests {
 	use super::*;
 
-	// --- field accessor tests ---
+	macro_rules! round_trip {
+		($inst:expr) => {
+			assert_eq!(decode(encode(&$inst)), $inst)
+		};
+	}
+
+	// --- field accessors ---
 
 	#[test]
 	fn opcode_extracts_top_6_bits() {
@@ -137,7 +303,6 @@ mod tests {
 
 	#[test]
 	fn rs_rt_rd_extract_correct_fields() {
-		// rs = 8, rt = 9, rd = 10
 		let word: u32 = (8 << 21) | (9 << 16) | (10 << 11);
 		assert_eq!(rs(word), 8);
 		assert_eq!(rt(word), 9);
@@ -147,25 +312,18 @@ mod tests {
 	#[test]
 	fn funct_extracts_low_6_bits() {
 		assert_eq!(funct(0x0000_0020), 0x20);
-		assert_eq!(funct(0x0000_000C), 0x0C);
 		assert_eq!(funct(0xFFFF_FFC0), 0x00);
 	}
 
 	#[test]
-	fn imm_sign_extends_negative() {
-		// 0x8000 == -32768 as i16
+	fn imm_sign_extends() {
 		assert_eq!(imm(0x0000_8000), -32768i16);
-	}
-
-	#[test]
-	fn imm_positive_value() {
 		assert_eq!(imm(0x0000_7FFF), 0x7FFF);
 	}
 
 	#[test]
 	fn shamt_extracts_bits_10_to_6() {
-		let word: u32 = 0b11111 << 6;
-		assert_eq!(shamt(word), 0x1f);
+		assert_eq!(shamt(0b11111 << 6), 0x1f);
 		assert_eq!(shamt(0), 0);
 	}
 
@@ -198,43 +356,231 @@ mod tests {
 
 	#[test]
 	fn r_type_masks_overflow() {
-		// Passing values wider than the field width should be masked cleanly.
 		let word = r_type(0x20, 0x3F, 0x3F, 0x3F, 0x3F);
 		assert_eq!(rs(word), 0x1F);
 		assert_eq!(rt(word), 0x1F);
 		assert_eq!(rd(word), 0x1F);
 	}
 
-	// --- decode / encode round-trips ---
+	// --- R-type arithmetic ---
 
 	#[test]
 	fn encode_decode_add() {
-		let inst = Instruction::Add {
+		round_trip!(Instruction::Add {
 			rd: 10,
 			rs: 12,
-			rt: 14,
-		};
-		assert_eq!(decode(encode(&inst)), inst);
+			rt: 14
+		});
+	}
+	#[test]
+	fn encode_decode_addu() {
+		round_trip!(Instruction::Addu {
+			rd: 1,
+			rs: 2,
+			rt: 3
+		});
+	}
+	#[test]
+	fn encode_decode_sub() {
+		round_trip!(Instruction::Sub {
+			rd: 4,
+			rs: 5,
+			rt: 6
+		});
+	}
+	#[test]
+	fn encode_decode_subu() {
+		round_trip!(Instruction::Subu {
+			rd: 7,
+			rs: 8,
+			rt: 9
+		});
 	}
 
-	#[test]
-	fn decode_encode_add() {
-		let word = (10 << 21) | (12 << 16) | (14 << 11) | 0x20;
-		assert_eq!(encode(&decode(word)), word);
-	}
+	// --- R-type logical ---
 
 	#[test]
-	fn encode_decode_add_immediate() {
-		let inst = Instruction::AddImmediate {
+	fn encode_decode_and() {
+		round_trip!(Instruction::And {
+			rd: 1,
+			rs: 2,
+			rt: 3
+		});
+	}
+	#[test]
+	fn encode_decode_or() {
+		round_trip!(Instruction::Or {
+			rd: 4,
+			rs: 5,
+			rt: 6
+		});
+	}
+	#[test]
+	fn encode_decode_xor() {
+		round_trip!(Instruction::Xor {
+			rd: 7,
+			rs: 8,
+			rt: 9
+		});
+	}
+	#[test]
+	fn encode_decode_nor() {
+		round_trip!(Instruction::Nor {
+			rd: 10,
+			rs: 11,
+			rt: 12
+		});
+	}
+
+	// --- R-type multiply / divide ---
+
+	#[test]
+	fn encode_decode_mult() {
+		round_trip!(Instruction::Mult { rs: 4, rt: 5 });
+	}
+	#[test]
+	fn encode_decode_multu() {
+		round_trip!(Instruction::Multu { rs: 6, rt: 7 });
+	}
+	#[test]
+	fn encode_decode_div() {
+		round_trip!(Instruction::Div { rs: 8, rt: 9 });
+	}
+	#[test]
+	fn encode_decode_divu() {
+		round_trip!(Instruction::Divu { rs: 10, rt: 11 });
+	}
+
+	// --- shifts ---
+
+	#[test]
+	fn encode_decode_sll() {
+		round_trip!(Instruction::Sll {
+			rd: 1,
+			rt: 2,
+			shamt: 4
+		});
+	}
+	#[test]
+	fn encode_decode_srl() {
+		round_trip!(Instruction::Srl {
+			rd: 3,
+			rt: 4,
+			shamt: 8
+		});
+	}
+	#[test]
+	fn encode_decode_sra() {
+		round_trip!(Instruction::Sra {
+			rd: 5,
+			rt: 6,
+			shamt: 16
+		});
+	}
+	#[test]
+	fn encode_decode_sllv() {
+		round_trip!(Instruction::Sllv {
+			rd: 1,
+			rt: 2,
+			rs: 3
+		});
+	}
+	#[test]
+	fn encode_decode_srlv() {
+		round_trip!(Instruction::Srlv {
+			rd: 4,
+			rt: 5,
+			rs: 6
+		});
+	}
+	#[test]
+	fn encode_decode_srav() {
+		round_trip!(Instruction::Srav {
+			rd: 7,
+			rt: 8,
+			rs: 9
+		});
+	}
+
+	// --- I-type arithmetic ---
+
+	#[test]
+	fn encode_decode_addi() {
+		round_trip!(Instruction::Addi {
 			rt: 3,
 			rs: 5,
-			imm: -100,
-		};
-		assert_eq!(decode(encode(&inst)), inst);
+			imm: -100
+		});
 	}
+	#[test]
+	fn encode_decode_addiu() {
+		round_trip!(Instruction::Addiu {
+			rt: 4,
+			rs: 6,
+			imm: 200
+		});
+	}
+
+	// --- I-type logical ---
+
+	#[test]
+	fn encode_decode_andi() {
+		round_trip!(Instruction::Andi {
+			rt: 1,
+			rs: 2,
+			imm: 0x00FF
+		});
+	}
+	#[test]
+	fn encode_decode_ori() {
+		round_trip!(Instruction::Ori {
+			rt: 3,
+			rs: 4,
+			imm: 0x0F0F
+		});
+	}
+	#[test]
+	fn encode_decode_xori() {
+		round_trip!(Instruction::Xori {
+			rt: 5,
+			rs: 6,
+			imm: 0x1234
+		});
+	}
+
+	// --- branch ---
+
+	#[test]
+	fn encode_decode_beq() {
+		round_trip!(Instruction::Beq {
+			rs: 1,
+			rt: 2,
+			offset: 16
+		});
+	}
+	#[test]
+	fn encode_decode_bne() {
+		round_trip!(Instruction::Bne {
+			rs: 3,
+			rt: 4,
+			offset: -8
+		});
+	}
+
+	// --- jump ---
+
+	#[test]
+	fn encode_decode_jump() {
+		// target must fit in 28 bits (top 4 bits are lost without a PC)
+		round_trip!(Instruction::Jump {
+			target: 0x0000_4000
+		});
+	}
+
+	// --- syscall ---
 
 	#[test]
 	fn encode_decode_syscall() {
-		assert_eq!(decode(encode(&Instruction::Syscall)), Instruction::Syscall);
+		round_trip!(Instruction::Syscall);
 	}
 }

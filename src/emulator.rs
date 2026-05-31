@@ -80,15 +80,15 @@ impl Emulator {
 		let mut next_state = RunState::Running;
 		match inst {
 			Instruction::Add { rd, rs, rt } => {
-				let rs_val = self.cpu.read_register(rs);
-				let rt_val = self.cpu.read_register(rt);
+				let rs_val = self.cpu.read_register(rs) as i32;
+				let rt_val = self.cpu.read_register(rt) as i32;
 				let result = rs_val.wrapping_add(rt_val); // Use wrapping_add to handle overflow
-				self.cpu.write_register(rd, result);
+				self.cpu.write_register(rd, result as u32);
 			}
-			Instruction::AddImmediate { rt, rs, imm } => {
-				let rs_val = self.cpu.read_register(rs);
-				let result = rs_val.wrapping_add(imm as u32); // Use wrapping_add to handle overflow
-				self.cpu.write_register(rt, result);
+			Instruction::Addi { rt, rs, imm } => {
+				let rs_val = self.cpu.read_register(rs) as i32;
+				let result = rs_val.wrapping_add(imm as i32); // Use wrapping_add to handle overflow
+				self.cpu.write_register(rt, result as u32);
 			}
 			Instruction::Beq { rs, rt, offset } => {
 				if self.cpu.read_register(rs) == self.cpu.read_register(rt) {
@@ -114,7 +114,7 @@ impl Emulator {
 					_ => unimplemented!("Syscall with $v0 = {} not implemented yet", v0),
 				}
 			}
-			_ => unimplemented!("Instruction not implemented yet"),
+			i => unimplemented!("Instruction {i:?} not implemented yet"),
 		}
 		Ok(next_state)
 	}
@@ -128,12 +128,12 @@ mod tests {
 	#[test]
 	fn test_add() {
 		let mut emu = Emulator::new();
-		let _ = emu.execute(Instruction::AddImmediate {
+		let _ = emu.execute(Instruction::Addi {
 			rt: T0,
 			rs: register::ZERO,
 			imm: 10,
 		});
-		let _ = emu.execute(Instruction::AddImmediate {
+		let _ = emu.execute(Instruction::Addi {
 			rt: T1,
 			rs: register::ZERO,
 			imm: 20,

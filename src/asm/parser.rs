@@ -76,7 +76,7 @@ pub fn parse_line(input: &str) -> Result<Parsed, ParseError> {
 			};
 			let rd = parse_register(rd)?;
 			let imm = parse_immediate(imm)?;
-			Ok(Parsed::Ready(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::Addi {
 				rt: rd,
 				rs: register::ZERO,
 				imm: imm as i16,
@@ -102,7 +102,7 @@ pub fn parse_line(input: &str) -> Result<Parsed, ParseError> {
 			let rt = parse_register(rt)?;
 			let rs = parse_register(rs)?;
 			let imm = parse_immediate(imm)?;
-			Ok(Parsed::Ready(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::Addi {
 				rs,
 				rt,
 				imm: imm as i16,
@@ -227,7 +227,7 @@ mod tests {
 	fn parses_addi() {
 		assert_eq!(
 			parse_line("addi $t0, $t1, 42"),
-			Ok(Parsed::Ready(Instruction::AddImmediate {
+			Ok(Parsed::Ready(Instruction::Addi {
 				rs: T1,
 				rt: T0,
 				imm: 42
