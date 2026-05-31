@@ -63,6 +63,25 @@ fn parse_immediate(imm: &str) -> Result<i32, ParseError> {
 		.map_err(|_| ParseError::InvalidArgument)
 }
 
+fn next_reg<'a>(args: &mut impl Iterator<Item = &'a str>) -> Result<usize, ParseError> {
+	parse_register(args.next().ok_or(ParseError::InvalidArgument)?)
+}
+
+fn next_imm<'a>(args: &mut impl Iterator<Item = &'a str>) -> Result<i32, ParseError> {
+	parse_immediate(args.next().ok_or(ParseError::InvalidArgument)?)
+}
+
+fn next_label<'a>(args: &mut impl Iterator<Item = &'a str>) -> Result<String, ParseError> {
+	Ok(args.next().ok_or(ParseError::InvalidArgument)?.to_string())
+}
+
+fn expect_end<'a>(args: &mut impl Iterator<Item = &'a str>) -> Result<(), ParseError> {
+	match args.next() {
+		None => Ok(()),
+		Some(_) => Err(ParseError::InvalidArgument),
+	}
+}
+
 // Ex: li $t0, 12
 pub fn parse_line(input: &str) -> Result<Parsed, ParseError> {
 	let input = input.trim();
@@ -70,83 +89,193 @@ pub fn parse_line(input: &str) -> Result<Parsed, ParseError> {
 	let mut args = rest.split(',').map(str::trim).filter(|s| !s.is_empty());
 
 	match mnemonic {
-		"li" => {
-			let (Some(rd), Some(imm), None) = (args.next(), args.next(), args.next()) else {
-				return Err(ParseError::InvalidArgument);
+		"add" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Add { rd, rs, rt }))
+		}
+		"addu" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Addu { rd, rs, rt }))
+		}
+		"addi" => {
+			let (rt, rs, imm) = fmt_itype(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Addi { rs, rt, imm }))
+		}
+		"addiu" => {
+			let (rt, rs, imm) = fmt_itype(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Addiu { rs, rt, imm }))
+		}
+
+		"and" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::And { rd, rs, rt }))
+		}
+		"andi" => {
+			let (rt, rs, imm) = fmt_itype(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Andi { rt, rs, imm }))
+		}
+
+		"div" => {
+			let (rs, rt) = fmt_r2(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Div { rs, rt }))
+		}
+		"divu" => {
+			let (rs, rt) = fmt_r2(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Divu { rs, rt }))
+		}
+
+		"nor" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Nor { rd, rs, rt }))
+		}
+		"or" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Or { rd, rs, rt }))
+		}
+		"ori" => {
+			let (rt, rs, imm) = fmt_itype(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Ori { rt, rs, imm }))
+		}
+
+		"sll" => {
+			let (rd, rt, shamt) = fmt_shamt(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Sll { rd, rt, shamt }))
+		}
+		"sllv" => {
+			let (rd, rt, rs) = fmt_shamt_var(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Sllv { rd, rt, rs }))
+		}
+
+		"sra" => {
+			let (rd, rt, shamt) = fmt_shamt(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Sra { rd, rt, shamt }))
+		}
+		"srav" => {
+			let (rd, rt, rs) = fmt_shamt_var(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Srav { rd, rt, rs }))
+		}
+		"srl" => {
+			let (rd, rt, shamt) = fmt_shamt(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Srl { rd, rt, shamt }))
+		}
+		"srlv" => {
+			let (rd, rt, rs) = fmt_shamt_var(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Srlv { rd, rt, rs }))
+		}
+
+		"sub" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Sub { rd, rs, rt }))
+		}
+		"subu" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Subu { rd, rs, rt }))
+		}
+
+		"xor" => {
+			let (rd, rs, rt) = fmt_r3(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Xor { rd, rs, rt }))
+		}
+		"xori" => {
+			let (rt, rs, imm) = fmt_itype(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Xori { rt, rs, imm }))
+		}
+
+		"beq" | "bne" => {
+			let (rs, rt, label) = fmt_branch(&mut args)?;
+			let kind = if mnemonic == "beq" {
+				Cond::Eq
+			} else {
+				Cond::Ne
 			};
-			let rd = parse_register(rd)?;
-			let imm = parse_immediate(imm)?;
+			Ok(Parsed::Branch {
+				kind,
+				rs,
+				rt,
+				label,
+			})
+		}
+		"j" => {
+			let label = next_label(&mut args)?;
+			expect_end(&mut args)?;
+			Ok(Parsed::Jump { label })
+		}
+
+		"syscall" => {
+			expect_end(&mut args)?;
+			Ok(Parsed::Ready(Instruction::Syscall))
+		}
+
+		// Pseudo Instructions
+		"li" => {
+			let rd = next_reg(&mut args)?;
+			let imm = next_imm(&mut args)?;
+			expect_end(&mut args)?;
 			Ok(Parsed::Ready(Instruction::Addi {
 				rt: rd,
 				rs: register::ZERO,
 				imm: imm as i16,
 			}))
 		}
-		"add" => {
-			let (Some(rd), Some(rs), Some(rt), None) =
-				(args.next(), args.next(), args.next(), args.next())
-			else {
-				return Err(ParseError::InvalidArgument);
-			};
-			let rd = parse_register(rd)?;
-			let rs = parse_register(rs)?;
-			let rt = parse_register(rt)?;
-			Ok(Parsed::Ready(Instruction::Add { rd, rs, rt }))
-		}
-		"addi" => {
-			let (Some(rt), Some(rs), Some(imm), None) =
-				(args.next(), args.next(), args.next(), args.next())
-			else {
-				return Err(ParseError::InvalidArgument);
-			};
-			let rt = parse_register(rt)?;
-			let rs = parse_register(rs)?;
-			let imm = parse_immediate(imm)?;
-			Ok(Parsed::Ready(Instruction::Addi {
-				rs,
-				rt,
-				imm: imm as i16,
-			}))
-		}
-		"syscall" => {
-			if args.next().is_some() {
-				return Err(ParseError::InvalidArgument);
-			}
-			Ok(Parsed::Ready(Instruction::Syscall))
-		}
-
-		"beq" | "bne" => {
-			let (Some(rs), Some(rt), Some(label), None) =
-				(args.next(), args.next(), args.next(), args.next())
-			else {
-				return Err(ParseError::InvalidArgument);
-			};
-
-			let kind = if mnemonic == "beq" {
-				Cond::Eq
-			} else {
-				Cond::Ne
-			};
-
-			Ok(Parsed::Branch {
-				kind,
-				rs: parse_register(rs)?,
-				rt: parse_register(rt)?,
-				label: label.to_string(),
-			})
-		}
-
-		"j" => {
-			let (Some(label), None) = (args.next(), args.next()) else {
-				return Err(ParseError::InvalidArgument);
-			};
-			Ok(Parsed::Jump {
-				label: label.to_string(),
-			})
-		}
-
 		_ => Err(ParseError::UnknownInstruction),
 	}
+}
+
+fn fmt_r3<'a>(
+	args: &mut impl Iterator<Item = &'a str>,
+) -> Result<(usize, usize, usize), ParseError> {
+	let rd = next_reg(args)?;
+	let rs = next_reg(args)?;
+	let rt = next_reg(args)?;
+	expect_end(args)?;
+	Ok((rd, rs, rt))
+}
+
+fn fmt_itype<'a>(
+	args: &mut impl Iterator<Item = &'a str>,
+) -> Result<(usize, usize, i16), ParseError> {
+	let rt = next_reg(args)?;
+	let rs = next_reg(args)?;
+	let imm = next_imm(args)? as i16;
+	expect_end(args)?;
+	Ok((rt, rs, imm))
+}
+
+fn fmt_shamt<'a>(
+	args: &mut impl Iterator<Item = &'a str>,
+) -> Result<(usize, usize, u32), ParseError> {
+	let rd = next_reg(args)?;
+	let rt = next_reg(args)?;
+	let shamt = next_imm(args)? as u32;
+	expect_end(args)?;
+	Ok((rd, rt, shamt))
+}
+
+fn fmt_shamt_var<'a>(
+	args: &mut impl Iterator<Item = &'a str>,
+) -> Result<(usize, usize, usize), ParseError> {
+	let rd = next_reg(args)?;
+	let rt = next_reg(args)?;
+	let rs = next_reg(args)?;
+	expect_end(args)?;
+	Ok((rd, rt, rs))
+}
+
+fn fmt_r2<'a>(args: &mut impl Iterator<Item = &'a str>) -> Result<(usize, usize), ParseError> {
+	let rd = next_reg(args)?;
+	let rs = next_reg(args)?;
+	expect_end(args)?;
+	Ok((rd, rs))
+}
+
+fn fmt_branch<'a>(
+	args: &mut impl Iterator<Item = &'a str>,
+) -> Result<(usize, usize, String), ParseError> {
+	let rs = next_reg(args)?;
+	let rt = next_reg(args)?;
+	let label = next_label(args)?;
+	expect_end(args)?;
+	Ok((rs, rt, label))
 }
 
 fn branch_offset(here: u32, target: u32) -> Result<i16, ParseError> {
@@ -192,7 +321,7 @@ pub fn resolve(
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use crate::register::{T0, T1, T2};
+	use crate::register::{self, T0, T1, T2};
 
 	#[test]
 	fn malformed_lines_are_rejected() {
@@ -211,15 +340,21 @@ mod tests {
 		}
 	}
 
+	// --- arithmetic ---
+
 	#[test]
 	fn parses_add() {
 		assert_eq!(
 			parse_line("add $t0, $t1, $t2"),
-			Ok(Parsed::Ready(Instruction::Add {
-				rd: T0,
-				rs: T1,
-				rt: T2
-			})),
+			Ok(Parsed::Ready(Instruction::Add { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_addu() {
+		assert_eq!(
+			parse_line("addu $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Addu { rd: T0, rs: T1, rt: T2 })),
 		);
 	}
 
@@ -227,19 +362,196 @@ mod tests {
 	fn parses_addi() {
 		assert_eq!(
 			parse_line("addi $t0, $t1, 42"),
-			Ok(Parsed::Ready(Instruction::Addi {
-				rs: T1,
-				rt: T0,
-				imm: 42
-			})),
+			Ok(Parsed::Ready(Instruction::Addi { rt: T0, rs: T1, imm: 42 })),
+		);
+	}
+
+	#[test]
+	fn parses_addiu() {
+		assert_eq!(
+			parse_line("addiu $t0, $t1, -1"),
+			Ok(Parsed::Ready(Instruction::Addiu { rt: T0, rs: T1, imm: -1 })),
+		);
+	}
+
+	#[test]
+	fn parses_sub() {
+		assert_eq!(
+			parse_line("sub $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Sub { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_subu() {
+		assert_eq!(
+			parse_line("subu $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Subu { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_div() {
+		assert_eq!(
+			parse_line("div $t0, $t1"),
+			Ok(Parsed::Ready(Instruction::Div { rs: T0, rt: T1 })),
+		);
+	}
+
+	#[test]
+	fn parses_divu() {
+		assert_eq!(
+			parse_line("divu $t0, $t1"),
+			Ok(Parsed::Ready(Instruction::Divu { rs: T0, rt: T1 })),
+		);
+	}
+
+	// --- logical ---
+
+	#[test]
+	fn parses_and() {
+		assert_eq!(
+			parse_line("and $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::And { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_andi() {
+		assert_eq!(
+			parse_line("andi $t0, $t1, 255"),
+			Ok(Parsed::Ready(Instruction::Andi { rt: T0, rs: T1, imm: 0xFF })),
+		);
+	}
+
+	#[test]
+	fn parses_or() {
+		assert_eq!(
+			parse_line("or $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Or { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_ori() {
+		assert_eq!(
+			parse_line("ori $t0, $t1, 7"),
+			Ok(Parsed::Ready(Instruction::Ori { rt: T0, rs: T1, imm: 7 })),
+		);
+	}
+
+	#[test]
+	fn parses_nor() {
+		assert_eq!(
+			parse_line("nor $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Nor { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_xor() {
+		assert_eq!(
+			parse_line("xor $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Xor { rd: T0, rs: T1, rt: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_xori() {
+		assert_eq!(
+			parse_line("xori $t0, $t1, 3"),
+			Ok(Parsed::Ready(Instruction::Xori { rt: T0, rs: T1, imm: 3 })),
+		);
+	}
+
+	// --- shifts ---
+
+	#[test]
+	fn parses_sll() {
+		assert_eq!(
+			parse_line("sll $t0, $t1, 2"),
+			Ok(Parsed::Ready(Instruction::Sll { rd: T0, rt: T1, shamt: 2 })),
+		);
+	}
+
+	#[test]
+	fn parses_sllv() {
+		assert_eq!(
+			parse_line("sllv $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Sllv { rd: T0, rt: T1, rs: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_srl() {
+		assert_eq!(
+			parse_line("srl $t0, $t1, 1"),
+			Ok(Parsed::Ready(Instruction::Srl { rd: T0, rt: T1, shamt: 1 })),
+		);
+	}
+
+	#[test]
+	fn parses_srlv() {
+		assert_eq!(
+			parse_line("srlv $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Srlv { rd: T0, rt: T1, rs: T2 })),
+		);
+	}
+
+	#[test]
+	fn parses_sra() {
+		assert_eq!(
+			parse_line("sra $t0, $t1, 3"),
+			Ok(Parsed::Ready(Instruction::Sra { rd: T0, rt: T1, shamt: 3 })),
+		);
+	}
+
+	#[test]
+	fn parses_srav() {
+		assert_eq!(
+			parse_line("srav $t0, $t1, $t2"),
+			Ok(Parsed::Ready(Instruction::Srav { rd: T0, rt: T1, rs: T2 })),
+		);
+	}
+
+	// --- pseudo ---
+
+	#[test]
+	fn parses_li() {
+		assert_eq!(
+			parse_line("li $t0, 5"),
+			Ok(Parsed::Ready(Instruction::Addi { rt: T0, rs: register::ZERO, imm: 5 })),
 		);
 	}
 
 	#[test]
 	fn parses_syscall() {
+		assert_eq!(parse_line("syscall"), Ok(Parsed::Ready(Instruction::Syscall)));
+	}
+
+	// --- control flow ---
+
+	#[test]
+	fn parses_beq() {
 		assert_eq!(
-			parse_line("syscall"),
-			Ok(Parsed::Ready(Instruction::Syscall)),
+			parse_line("beq $t0, $t1, loop"),
+			Ok(Parsed::Branch { kind: Cond::Eq, rs: T0, rt: T1, label: "loop".into() }),
+		);
+	}
+
+	#[test]
+	fn parses_bne() {
+		assert_eq!(
+			parse_line("bne $t0, $t1, loop"),
+			Ok(Parsed::Branch { kind: Cond::Ne, rs: T0, rt: T1, label: "loop".into() }),
+		);
+	}
+
+	#[test]
+	fn parses_j() {
+		assert_eq!(
+			parse_line("j exit"),
+			Ok(Parsed::Jump { label: "exit".into() }),
 		);
 	}
 }
