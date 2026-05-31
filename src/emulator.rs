@@ -90,6 +90,19 @@ impl Emulator {
 				let result = rs_val.wrapping_add(imm as u32); // Use wrapping_add to handle overflow
 				self.cpu.write_register(rt, result);
 			}
+			Instruction::Beq { rs, rt, offset } => {
+				if self.cpu.read_register(rs) == self.cpu.read_register(rt) {
+					self.cpu.pc = self.cpu.pc.wrapping_add((offset as i32 as u32) << 2);
+				}
+			}
+			Instruction::Bne { rs, rt, offset } => {
+				if self.cpu.read_register(rs) != self.cpu.read_register(rt) {
+					self.cpu.pc = self.cpu.pc.wrapping_add((offset as i32 as u32) << 2);
+				}
+			}
+			Instruction::Jump { target } => {
+				self.cpu.pc = target;
+			}
 			Instruction::Syscall => {
 				let v0 = self.cpu.read_register(register::V0);
 				match v0 {
@@ -115,17 +128,17 @@ mod tests {
 	#[test]
 	fn test_add() {
 		let mut emu = Emulator::new();
-		emu.execute(Instruction::AddImmediate {
+		let _ = emu.execute(Instruction::AddImmediate {
 			rt: T0,
 			rs: register::ZERO,
 			imm: 10,
 		});
-		emu.execute(Instruction::AddImmediate {
+		let _ = emu.execute(Instruction::AddImmediate {
 			rt: T1,
 			rs: register::ZERO,
 			imm: 20,
 		});
-		emu.execute(Instruction::Add {
+		let _ = emu.execute(Instruction::Add {
 			rd: T2,
 			rs: T0,
 			rt: T1,

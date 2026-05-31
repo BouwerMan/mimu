@@ -1,7 +1,10 @@
 li $t0, 10
 li $t1, 20
-#addi $t0, $zero, 10
-#addi $t1, $zero, 20
-add $t2, $t0, $t1
+li $t2, 40
+loop:
+add $t1, $t0, $t1
+bne $t1, $t2, loop
+
+# Exit syscall
 addi $v0, $zero, 10
 syscall
